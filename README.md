@@ -4,7 +4,10 @@
 
 Reddit Mastermind is a Next.js application that autonomously generates high-fidelity, human-like Reddit content calendars using a sophisticated 2-Pass AI architecture ("The Architect" + "The Critic"). It allows marketing teams to plan, visualize, and export authentic Reddit discussions that blend seamlessly into target subreddits.
 
-![Demo](demo.gif) *<!-- Demo video placeholder -->*
+
+
+[![Watch the Demo](https://img.shields.io/badge/Watch_Demo_Video-Google_Drive-blue?style=for-the-badge&logo=google-drive)](https://drive.google.com/drive/folders/1ELC3l3EmNyVEDRvLehokCwklKt9GKgN4?usp=sharing)
+*Click the badge above to watch the project demo.*
 
 ## 🚀 Key Features
 
