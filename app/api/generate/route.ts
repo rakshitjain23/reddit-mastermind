@@ -38,7 +38,7 @@ const PostSchema = z.object({
 
 type DraftPost = z.infer<typeof PostSchema>;
 
-export const maxDuration = 120; // Extended for 2-pass generation
+export const maxDuration = 60; // Standard limit, but optimization makes it faster
 
 export async function POST(req: Request) {
   const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -69,9 +69,10 @@ export async function POST(req: Request) {
       `- Username: u/${p.username}\n  Bio/Tone: ${p.bio}`
     ).join("\n\n");
 
-    console.log(`[Pass 1] Generating Draft for week ${weekStartStr}...`);
-
-    const draftPrompt = `
+    // Combine Architect + Critic into one powerful prompt to avoid Vercel Timeouts
+    // but RESTORE the full fidelity of the original prompts.
+    const combinedPrompt = `
+PHASE 1: THE ARCHITECT
 You are "The Reddit Architect" – the world's best generator of human-like Reddit content.
 
 Your mission:
@@ -105,216 +106,81 @@ TECHNICAL RULES:
 - No markdown formatting.
 - If JSON breaks, regenerate until valid.
 
-TASK: Generate a complete weekly Reddit content calendar.
-The final result must follow ALL realism rules, persona rules, and JSON structure.
-
 ---------------------------------
-COMPANY INFO:
-${companyInfo}
+CONTEXT:
+Company: ${companyInfo}
+Website: ${companyWebsite}
+Subreddits: ${subreddits.join(", ")}
+Topics: ${topicsToUse.join(", ")}
+Posts Needed: ${postsPerWeek}
+Previous Topics: ${previousTopics.join(", ")}
 
-WEBSITE:
-${companyWebsite}
-
-PERSONAS (ONLY use these personas):
+VALID PERSONAS (STRICTLY USE ONLY THESE):
 ${formattedPersonas}
 
-TARGET SUBREDDITS:
-${subreddits.join(", ")}
+---------------------------------
 
-TOPIC QUERIES:
-${topicsToUse.join(", ")}
+PHASE 2: THE CRITIC (INTERNAL QUALITY ASSURANCE)
+After drafting, you must immediately switch roles to "The Critic" — an elite content QA model.
+Critique your own draft against this checklist and FIX it before outputting.
 
-POSTS REQUIRED THIS WEEK:
-${postsPerWeek}
+CRITIC CHECKLIST:
+1. SALESY DETECTION  
+If any post sounds like an ad, pitch, or corporate content -> Rewrite it as a frustrated question, rant, or anecdotal post.
 
-PREVIOUS TOPICS (avoid repeating):
-${previousTopics.join(", ")}
+2. PERSONA CONSISTENCY  
+Check if personas speak consistently and no persona replies to themselves. Fix violations.
+
+3. UNKNOWN USERNAMES  
+If ANY username is NOT in the valid persona list -> Replace with a valid one.
+
+4. SUBREDDIT FIT  
+If a post doesn’t match the subreddit culture -> Rewrite tone/content to fit.
+
+5. REALISM BOOST  
+Enhance natural flow, slang, slight typos, controversies, and emotional nuance.
+
+6. COMMENT THREAD LOGIC  
+Fix if comment doesn’t reference post, personas feel repetitive, or thread feels too polished.
 
 ---------------------------------
-STEP 1 — Generate a Persona Reasoning Plan
-Before writing anything, internalize:
-- Which persona should write each post
-- Why this persona fits the topic
-- Which subreddit fits best
-- Expected tone (casual, ranting, analytic, confused, etc.)
-- How human imperfections will be added
-
----------------------------------
-STEP 2 — Generate Post Ideas
-For each topic, select the strongest idea that is:
-- Most discussion potential
-- Most relatable
-- Most aligned with personas
-- Least salesy
-
----------------------------------
-STEP 3 — Generate Full Reddit Posts
-For each selected idea generate:
-
-- title: short, punchy, human
-- body: 2–6 paragraphs, variable length
-  - long if the topic is deep
-  - short if it's a question or rant
-
-Include:
-- uncertainty ("idk if i'm dumb but...")
-- mild imperfections
-- personal experiences
-- Reddit-like tone variation
-
-Subtle product mentions okay, but:
-**NEVER sound like a company wrote it.**
-
----------------------------------
-STEP 4 — Generate Natural Comment Threads
-For each post:
-Create:
-- 3–6 comments
-- Each from different personas (MUST be from the provided list)
-- Comments must:
-  - Reference specific parts of the post
-  - Build on each other
-  - Include disagreements, clarifications, advice, emotions
-  - Sound like real Reddit humans
-
-A comment can include:
-- Random frustrations
-- Follow-up questions
-- Humor
-- Personal anecdotes
-- Typos or casual abbreviations
-
----------------------------------
-OUTPUT FORMAT (STRICT JSON ONLY)
+FINAL TASK:
+Perform the Role of Architect to Draft, then the Role of Critic to Refine.
+Return ONLY the final, refined, validity-checked JSON.
 
 {
   "week_start": "${weekStartStr}",
+  "qualityScore": 95,
+  "critique": "Self-Reflection: [Describe specifically what The Critic fixed in the draft]",
   "posts": [
     {
       "title": "string",
       "body": "string",
       "subreddit": "string",
-      "persona": "string",
+      "persona": "string (EXACT USERNAME FROM LIST)",
       "topic": "string",
       "comments": [
-        { "persona": "string", "text": "string", "replies": [ ... ] }
+        { "persona": "string (DIFFERENT USERNAME FROM LIST)", "text": "string" }
       ]
     }
   ]
 }
-
-No markdown. No explanation. Return ONLY JSON.
 `;
 
-    // --- PASS 1: DRAFT GENERATION ---
-    const draftCompletion = await openai.chat.completions.create({
+    console.log(`[Single Pass] Generating & Critiquing Content (Full Fidelity)...`);
+
+    const completion = await openai.chat.completions.create({
       messages: [
-        { role: "system", content: "You represent the raw, unfiltered internet. Output JSON." },
-        { role: "user", content: draftPrompt }
+        { role: "system", content: "You are the ultimate Reddit content engine. Output optimized JSON." },
+        { role: "user", content: combinedPrompt }
       ],
       model: "deepseek-chat",
       response_format: { type: "json_object" },
-      temperature: 0.85,
+      temperature: 0.8,
     });
 
-    const draftContent = draftCompletion.choices[0].message.content;
-    if (!draftContent) throw new Error("Draft generation failed");
-    
-    console.log(`[Pass 2] The Critic is reviewing...`);
-
-    const criticPrompt = `
-You are "The Critic" — an elite content QA model.
-
-Your job is to FIX and UPGRADE the draft Reddit calendar JSON.
-
----------------------------------
-VALID PERSONAS:
-${formattedPersonas}
-
-INPUT JSON:
-${draftContent}
-
----------------------------------
-CRITIC CHECKLIST:
-
-1. SALESY DETECTION  
-If any post sounds like:
-- an ad
-- a pitch
-- corporate content  
-➡️ Rewrite it as a frustrated question, rant, or anecdotal post.
-
-2. PERSONA CONSISTENCY  
-Check if:
-- personas speak consistently  
-- vocabulary matches their bio  
-- no persona replies to themselves  
-Fix violations.
-
-3. UNKNOWN USERNAMES  
-If ANY username is NOT in the valid persona list:  
-➡️ Replace with a valid one.
-
-4. SUBREDDIT FIT  
-If a post doesn’t match the subreddit culture:  
-➡️ Rewrite tone/content to fit.
-
-5. REALISM BOOST  
-Enhance:
-- natural flow  
-- slang  
-- typos (slight)  
-- controversies  
-- conversational engagement  
-- emotional nuance
-
-6. LENGTH BALANCING  
-Posts should vary:
-- Some long deep dives  
-- Some short, raw questions  
-- Some personal stories  
-
-7. COMMENT THREAD LOGIC  
-Fix if:
-- comment doesn’t reference post  
-- replies don’t make sense  
-- personas feel repetitive  
-- thread feels too polished  
-- thread lacks tension or debate  
-
-8. REDDIT AUTHENTICITY  
-Enforce:
-- No "perfect paragraphs"
-- Add human-like pauses, “idk”, “lol”, “ngl”
-- Use personal takes
-- Avoid generic templated replies
-
----------------------------------
-FINAL TASK:
-Return:
-
-{
-  "week_start": "...",
-  "qualityScore": number (0-100),
-  "critique": "description of what you improved",
-  "posts": [...]
-}
-
-Only JSON. Nothing else.
-`;
-
-    const finalCompletion = await openai.chat.completions.create({
-      messages: [
-        { role: "system", content: "You are an expert editor. Output optimized JSON." },
-        { role: "user", content: criticPrompt }
-      ],
-      model: "deepseek-chat",
-      response_format: { type: "json_object" },
-      temperature: 0.7,
-    });
-
-    const finalContent = finalCompletion.choices[0].message.content;
-    if (!finalContent) throw new Error("Critic generation failed");
+    const finalContent = completion.choices[0].message.content;
+    if (!finalContent) throw new Error("Generation failed");
 
     // Parse and Validate
     const parsedParams = JSON.parse(finalContent);
