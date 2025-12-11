@@ -1,65 +1,144 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { GeneratorForm } from "@/components/GeneratorForm";
+import { ContentCalendar } from "@/components/ContentCalendar";
+import { GeneratorFormData, CalendarData } from "@/lib/types";
+import { AlertCircle, Plus, Loader2 } from "lucide-react";
 
 export default function Home() {
+  const [calendarWeeks, setCalendarWeeks] = useState<CalendarData[]>([]);
+  const [lastFormData, setLastFormData] = useState<GeneratorFormData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generateWeek = async (formData: GeneratorFormData, offset: number, prevTopics: string[]) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          weekOffset: offset,
+          previousTopics: prevTopics,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate content");
+      }
+
+      const data: CalendarData = await response.json();
+      return data;
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : "An unexpected error occurred";
+      setError(errorMessage);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial Generation (Week 0)
+  const handleGenerate = async (formData: GeneratorFormData) => {
+    setLastFormData(formData);
+    setCalendarWeeks([]); // Clear previous results
+    
+    const data = await generateWeek(formData, 0, []);
+    if (data) {
+      setCalendarWeeks([data]);
+      setTimeout(() => {
+        document.getElementById("results-section")?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  };
+
+  // Generate Next Week
+  const handleGenerateNextWeek = async () => {
+    if (!lastFormData) return;
+
+    const currentOffset = calendarWeeks.length;
+    // Collect all topics used so far to avoid repetition
+    const usedTopics = calendarWeeks.flatMap(week => 
+        week.posts.map(p => p.topic).filter(Boolean) as string[]
+    );
+
+    const data = await generateWeek(lastFormData, currentOffset, usedTopics);
+    if (data) {
+      setCalendarWeeks(prev => [...prev, data]);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="min-h-screen relative overflow-hidden bg-black text-white selection:bg-purple-500/30">
+        
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 z-0">
+         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/20 blur-[120px] animate-fade-in" />
+         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-purple-600/20 blur-[120px] animate-fade-in delay-500" />
+      </div>
+
+      <div className="relative z-10 px-4 py-16 md:py-24 max-w-7xl mx-auto space-y-24">
+        
+        {/* Hero Section */}
+        <div className="space-y-6 text-center max-w-3xl mx-auto">
+          
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter bg-linear-to-r from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent animate-in fade-in zoom-in-95 duration-1000">
+            Reddit Mastermind
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          
+          <p className="text-lg md:text-xl text-zinc-400 leading-relaxed animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-200">
+            Generate authentic, undetectable Reddit marketing campaigns. 
+            Simulate organic threads, manage personas, and dominate the conversation.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+        {/* Input Section */}
+        <GeneratorForm onGenerate={handleGenerate} isLoading={isLoading && calendarWeeks.length === 0} />
+
+        {/* Error Display */}
+        {error && (
+          <div className="max-w-2xl mx-auto mt-8 p-4 bg-red-500/10 border border-red-500/25 rounded-xl flex items-center gap-3 text-red-200 animate-in fade-in slide-in-from-bottom-2">
+            <AlertCircle className="shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* Results Section */}
+        {calendarWeeks.length > 0 && (
+          <div id="results-section" className="scroll-mt-12 min-h-[80vh] space-y-12">
+            {calendarWeeks.map((weekData, idx) => (
+               <div key={idx} className="relative">
+                  {idx > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-zinc-700 text-sm">▼</div>}
+                  <ContentCalendar data={weekData} />
+               </div>
+            ))}
+
+            {/* Load More Button */}
+            <div className="flex justify-center pb-20">
+              <button
+                onClick={handleGenerateNextWeek}
+                disabled={isLoading}
+                className="group relative px-8 py-4 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-full transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                  <div className="flex items-center gap-3">
+                    {isLoading ? (
+                         <Loader2 className="animate-spin text-zinc-400" />
+                    ) : (
+                         <Plus className="text-zinc-400 group-hover:text-white transition-colors" />
+                    )}
+                    <span className="font-bold text-zinc-300 group-hover:text-white transition-colors">
+                        {isLoading ? "Forging Next Week..." : "Generate Next Week"}
+                    </span>
+                  </div>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }
