@@ -55,7 +55,7 @@ Reddit Mastermind is a Next.js application that autonomously generates high-fide
 Instead of a single prompt, we use a pipeline:
 1.  **Drafting**: The AI receives a "Reddit Architect" system prompt to create raw content.
 2.  **Review**: The output is passed to "The Critic", which checks against a checklist:
-    *   *Is it salesy?* -> Rewrite as a rant/question.
+    *   *Is it salesy?* -> Rewrite as rant/question.
     *   *Persona Match?* -> Verify usernames against the allowlist.
     *   *Realism?* -> Add "idk", "ngl", and sentence variety.
 3.  **Enrichment**: The server injects UUIDs and realistic timestamps (randomized distribution 9AM-9PM) before returning.
